@@ -1,11 +1,12 @@
 # rsync-snapshot
 
-This script offers automated snapshot-style backup using `rsync`. It creates incremental backups of files and directories to a local backup drive. 
+This script offers automated snapshot-style backup using `rsync`. It creates incremental backups of files and directories to a local backup drive or directory. 
 
 ## Features
-- Each snapshot backup is saved under its own folder with a time stamp attached. Backed-up files and directories can be accessed and therefore restored directly.
+- Each snapshot backup is saved under its own directory with a time stamp attached. Backed-up files and directories can be accessed and therefore restored directly.
 - Unchanged files and directories are hardlinked to save space.
-- Umount backup drive after each backup circle to protect data intergrity.
+- (Optionally) certain files and directories can be excluded from the backup process.
+- (Optionally) a standalone backup drive can be mounted before and umounted after each backup circle to protect data intergrity.
 - Automatically rotate and purge old backups.
 - A symlink `last` always pointing to the latest backup snapshot.
 
@@ -24,18 +25,22 @@ Optionally, copy and move the script to `/usr/local/sbin`.
 ## Usage
 
 ```
-Usage: rsync-snapshot.sh [OPTION]... SRC
+Usage: rsync-snapshot.sh [OPTION]... SRC DST
 
 Options
-  -e      Specify backup exclusion file (default: /etc/backups/backup.exclusions)
-  -d      Specify UUID registration file (default: /etc/backups/backup.disks)
-  -p      Specify backup drive mounting point (default: /mnt)
+  -e      Specify backup exclusion file
+  -d      Specify UUID registration file
   -n      Specify number of snapshots to keep (default: 5)
   -h      Display help
 ```
-The script expects a file specifying files and directories to be excluded from backups. The default location is `/etc/backups/backup.exclusions` but can be re-specified using the `-e` option.
 
-### Example of the backup exclusion file (for whole system backup)
+The parameter `SRC` specifies the backup source while `DST` indicates the backup destination.
+
+On the backup drive, the script will create a symlink `last` always pointing to the latest backup snapshot.
+
+Optionally, a plain text file (e.g.: `/etc/backups/backup.exclusions`) can be specified using the `-e` option to indicate files and directories to be excluded from the backup process.
+
+### Example - A backup exclusion file for whole system backup
 
 ```
 /dev/*
@@ -45,29 +50,30 @@ The script expects a file specifying files and directories to be excluded from b
 /run/*
 /var/tmp/*
 /var/cache/*
+/var/run/*
 /media/*
 /mnt/*
 /lost+found
 ```
 
-The script also requires an UUID registration file (default location: `/etc/backups/backup.disks`). Multiple UUIDs for the backup partition can be included in the file with one UUID per line (for potentially rotating the backup drives physically). The script will mount the partition based on the first matched UUID as the backup location.
+Optionally, a backup drive registration file (e.g.: `/etc/backups/backup.drives`) can be specified using the `-d` option. Multiple UUIDs for the backup partition can be included in the file with one UUID per line (for physically rotating the backup drives).
 
-If the backup partition is initially umounted, the script will mount the partition to the specified mounting point (default: `\mnt`). After the backup process, the partition will be umounted to protect data integrity. If the backup partition has already been mounted to a different location, the script will ignore the specified mounting point and keep it mounted after the backup process.
+If the backup partition is initially umounted, the script will mount it to the specified backup destination `DST`. After the backup process, the partition will be umounted to protect data integrity.
 
-On the backup drive, the script will create a symlink `last` always pointing to the latest backup snapshot.
+If the backup partition has already been mounted to a different location, the script will ignore the specified backup destination `DST` and keep the backup drive at its current mount point after the backup process.
 
 ## Examples
 
-Backup the home directory with exclusion file `~/exclusion_list.txt`:
+Backup the home directory to `/backups`:
 
 ```
-./rsync-snapshot.sh -e ~/exclusion_list.txt ~/
+sudo ./rsync-snapshot.sh ~/ /backups
 ```
 
-Whole system backup:
+Whole system backup with backup exclusion file `/etc/backups/backup.exclusions` to backup drive specified in `/etc/backups/backup.drives` mounted at `/mnt`:
 
 ```
-sudo ./rsync-snapshot.sh /
+sudo ./rsync-snapshot.sh -e /etc/backups/backup.exclusions -d /etc/backups/backup.drives / /mnt
 ```
 
 ### Add a cron job for automated backup
@@ -75,7 +81,7 @@ sudo ./rsync-snapshot.sh /
 Use `sudo crontab -e` to add a cron job, such as:
 
 ```
-5 0 * * * /usr/local/sbin/rsync-snapshot.sh /
+5 0 * * * /usr/local/sbin/rsync-snapshot.sh -e /etc/backups/backup.exclusions -d /etc/backups/backup.drives / /mnt
 ```
 
 This does daily backup at 0:05 am.
