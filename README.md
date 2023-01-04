@@ -56,7 +56,7 @@ Optionally, a plain text file (e.g.: `/etc/backups/backup.exclusions`) can be sp
 /lost+found
 ```
 
-Optionally, a backup drive registration file (e.g.: `/etc/backups/backup.drives`) can be specified using the `-d` option. Multiple UUIDs for the backup partition can be included in the file with one UUID per line (for physically rotating the backup drives).
+Optionally, a backup drive registration file (e.g.: `/etc/backups/backup.drives`) can be specified using the `-d` option. Multiple UUIDs for potential backup partitions can be included in the file with one UUID per line (for physically rotating the backup drives).
 
 If the backup partition is initially umounted, the script will mount it to the specified backup destination `DST`. After the backup process, the partition will be umounted to protect data integrity.
 
