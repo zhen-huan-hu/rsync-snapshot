@@ -62,11 +62,15 @@ If a registered backup partition is initially umounted, the script will mount it
 
 ## Examples
 
+### Backup to a local directory
+
 Backup the home directory to `/backups`:
 
 ```
 sudo ./rsync-snapshot.sh ~/ /backups
 ```
+
+### Backup to a local backup drive
 
 Whole system backup with backup exclusion file `/etc/backups/backup.exclusions` to backup drive specified in `/etc/backups/backup.drives` mounted at `/mnt`:
 
