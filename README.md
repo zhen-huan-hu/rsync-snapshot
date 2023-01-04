@@ -58,9 +58,7 @@ Optionally, a plain text file (e.g.: `/etc/backups/backup.exclusions`) can be sp
 
 Optionally, a backup drive registration file (e.g.: `/etc/backups/backup.drives`) can be specified using the `-d` option. Multiple UUIDs for potential backup partitions can be included in the file with one UUID per line (for physically rotating the backup drives).
 
-If the backup partition is initially umounted, the script will mount it to the specified backup destination `DST`. After the backup process, the partition will be umounted to protect data integrity.
-
-If the backup partition has already been mounted to a different location, the script will ignore the specified backup destination `DST` and keep the backup drive at its current mount point after the backup process.
+If a registered backup partition is initially umounted, the script will mount it to the specified backup destination `DST`. After the backup process, the partition will be automatically umounted to protect data integrity. If a registered backup partition is already mounted, the script will ignore the specified backup destination `DST` and keep the backup drive at its current mount point after the backup process.
 
 ## Examples
 
