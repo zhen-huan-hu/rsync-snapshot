@@ -123,7 +123,6 @@ if [ -n "$UUID_FILE" ]; then
             mount -U "$UUID" "$BACKUP_DIR"
         fi
     fi
-fi
 else
     BACKUP_DIR="$(realpath -m "$BACKUP_DST")"
 fi
