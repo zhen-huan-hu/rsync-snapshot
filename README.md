@@ -36,7 +36,7 @@ Options
 
 The parameter `SRC` specifies the backup source while `DST` indicates the backup destination.
 
-On the backup drive, the script will create a symlink `last` always pointing to the latest backup snapshot.
+After each backup circle, the script will create a symlink `last` always pointing to the latest backup snapshot.
 
 Optionally, a plain text file (e.g.: `/etc/backups/backup.exclusions`) can be specified using the `-e` option to indicate files and directories to be excluded from the backup process.
 
