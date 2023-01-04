@@ -19,40 +19,40 @@ fi
 # Script configuration
 #
 
-# This file contains exclusions from backup
-EXCLUSION_FILE='/etc/backups/backup.exclusions'
-
-# This file contains UUIDs of registered backup drives
-UUID_FILE='/etc/backups/backup.disks'
-
-# The backup partition is mounted there
-MOUNT_POINT='/mnt'
-
-# Number of snapshots to keep
+EXCLUSION_FILE=
+UUID_FILE=
 NKEEP=5
+AUTO_UMOUNT=0
 
 # Parse options
-while getopts ":e:d:p:n:h" OPTION; do
+while getopts ":e:d:n:h" OPTION; do
     case "$OPTION" in
     e) # Specify backup exclusion file
-        EXCLUSION_FILE="$OPTARG"
+        if [ ! -f "$OPTARG" ]; then
+            echo "Invalid backup exclusion file $OPTARG" 1>&2
+            exit 1
+        else
+            EXCLUSION_FILE="$OPTARG"
+        fi
         ;;
     d) # Specify drive UUID registration file
-        UUID_FILE="$OPTARG"
-        ;;
-    p) # Specify backup drive mounting point
-        MOUNT_POINT="$OPTARG"
+        if [ ! -f "$OPTARG" ]; then
+            echo "Invalid drive UUID registration file $OPTARG" 1>&2
+            exit 1
+        else
+            UUID_FILE="$OPTARG"
+        fi
         ;;
     n) # Specify number of snapshots to keep
         NKEEP="$OPTARG"
         ;;
     h) # Display this help
-        echo "Usage: $(basename "$0") [-e EXCLUSION_FILE] [-d UUID_FILE] [-p MOUNT_POINT] [-n NKEEP] [-h] BACKUP_SRC"
+        echo "Usage: $(basename "$0") [-e EXCLUSION_FILE] [-d UUID_FILE] [-n NKEEP] [-h] SRC DEST"
         exit 0
         ;;
     *)
         echo "Invalid option: -$OPTARG" 1>&2
-        echo "Usage: $(basename "$0") [-e EXCLUSION_FILE] [-d UUID_FILE] [-p MOUNT_POINT] [-n NKEEP] [-h] BACKUP_SRC" 1>&2
+        echo "Usage: $(basename "$0") [-e EXCLUSION_FILE] [-d UUID_FILE] [-n NKEEP] [-h] SRC DEST" 1>&2
         exit 1
         ;;
     esac
@@ -60,28 +60,37 @@ done
 shift "$((OPTIND-1))"
 
 # Backup source
-if [ $# -eq 0 ]; then
-    echo 'Backup source not specified' 1>&2
+if [ $# -ne 2 ]; then
+    echo 'Invalid number of parameters' 1>&2
     exit 1
 else
-    BACKUP_SRC="$1"
+    if [ ! -e "$1" ]; then
+        echo "Invalid backup source" 1>&2
+        exit 1        
+    else
+        BACKUP_SRC="$1"
+    fi
+    if [ ! -d "$2" ]; then
+        echo "Invalid backup destination" 1>&2
+        exit 1
+    else
+        BACKUP_DST="$2"
+    fi
 fi
 
 echo "Backup source: $BACKUP_SRC"
+echo "Backup destination: $BACKUP_DST"
 echo "Backup exclusion file: $EXCLUSION_FILE"
 echo "Drive UUID registration file: $UUID_FILE"
-echo "Backup drive mounting point: $MOUNT_POINT"
 echo "Number of snapshots to keep: $NKEEP"
 
 #
 # End of script configuration
 #
 
-# Find whether any connected block device is a registered backup drive
-if [ ! -f "$UUID_FILE" ]; then
-    echo 'Drive UUID registration file does not exist' 1>&2
-    exit 1
-else
+# If an UUID of a backup drive is provided, try to mount it to the backup destination
+if [ -n "$UUID_FILE" ]; then
+    # Find whether any connected block device is a registered backup drive
     mapfile -t ALLOWED_UUIDS < "$UUID_FILE"
     for UUID in "${ALLOWED_UUIDS[@]}"; do
         if lsblk --noheadings --output fstype "/dev/disk/by-uuid/$UUID" 2> /dev/null | grep --quiet --line-regexp 'ext[2-4]'; then
@@ -90,27 +99,21 @@ else
         fi
         UUID=
     done
-fi
 
-if [ -z "$UUID" ]; then
-    echo 'No eligible backup disk connected' 1>&2
-    exit 1
-fi
-
-# Find the mount point if the drive is already mounted
-AUTO_UMOUNT=0
-BACKUP_DIR="$(lsblk --noheadings --output mountpoint "/dev/disk/by-uuid/$UUID")"
-
-if [ -n "$BACKUP_DIR" ]; then
-    echo "Drive $UUID is already mounted on $BACKUP_DIR"
-    echo "Use $BACKUP_DIR as backup directory instead"
-    AUTO_UMOUNT=1
-else
-    if [ ! -d "$MOUNT_POINT" ]; then
-        echo "Mount point $MOUNT_POINT does not exist" 1>&2
+    if [ -z "$UUID" ]; then
+        echo 'No eligible backup disk connected' 1>&2
         exit 1
+    fi
+
+    # Find the mount point if the drive is already mounted
+    BACKUP_DIR="$(lsblk --noheadings --output mountpoint "/dev/disk/by-uuid/$UUID")"
+
+    if [ -n "$BACKUP_DIR" ]; then
+        echo "Drive $UUID is already mounted on $BACKUP_DIR"
+        echo "Use $BACKUP_DIR as backup directory instead"
+        AUTO_UMOUNT=1
     else
-        BACKUP_DIR="$(realpath -m "$MOUNT_POINT")"
+        BACKUP_DIR="$(realpath -m "$BACKUP_DST")"
 
         # Check if the mount point is occupied by another drive
         if mountpoint -q "$BACKUP_DIR"; then
@@ -120,6 +123,9 @@ else
             mount -U "$UUID" "$BACKUP_DIR"
         fi
     fi
+fi
+else
+    BACKUP_DIR="$(realpath -m "$BACKUP_DST")"
 fi
 
 # Backup name schema
@@ -132,9 +138,16 @@ DESTDIR="$BACKUP_DIR/$(date +%F-%T)-$(hostname)"
 
 echo "Starting rsync backup for $(date)"
 
-rsync -aAXx --itemize-changes --stats --human-readable \
-    --delete --delete-excluded --exclude-from="$EXCLUSION_FILE" \
-    --link-dest="$LASTDIR" "$BACKUP_SRC" "$DESTDIR"
+if [ -n "$EXCLUSION_FILE" ]; then
+    rsync -aAXx --delete \
+        --itemize-changes --stats --human-readable \
+        --delete-excluded --exclude-from="$EXCLUSION_FILE" \
+        --link-dest="$LASTDIR" "$BACKUP_SRC" "$DESTDIR"
+else
+    rsync -aAXx --delete \
+        --itemize-changes --stats --human-readable \
+        --link-dest="$LASTDIR" "$BACKUP_SRC" "$DESTDIR"
+fi
 
 # Touch the dir to reflect the snapshot time
 touch "$DESTDIR"
@@ -164,14 +177,16 @@ if [ $NEXPIRED -gt 0 ]; then
     while [ $COUNTER -lt $NEXPIRED ]; do
         rm -r --force "${SNAPSHOTS[$COUNTER]}"
         echo "Expired snapshot ${SNAPSHOTS[$COUNTER]} was purged"
-        let COUNTER=$COUNTER+1
+        let COUNTER+=1
     done
 fi
 
-echo "Backup drive used: $(df -h --output=pcent "/dev/disk/by-uuid/$UUID" | sed 1d)"
+if [ -n "$UUID" ]; then
+    echo "Backup drive used: $(df -h --output=pcent "/dev/disk/by-uuid/$UUID" | sed 1d)"
 
-# Unmount backup directory
-if [ $AUTO_UMOUNT -eq 0 ]; then
-    echo "Unmount $BACKUP_DIR"
-    umount "$BACKUP_DIR"
+    # Unmount backup directory
+    if [ $AUTO_UMOUNT -eq 0 ]; then
+        echo "Unmount $BACKUP_DIR"
+        umount "$BACKUP_DIR"
+    fi
 fi
